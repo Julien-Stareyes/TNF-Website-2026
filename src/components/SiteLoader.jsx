@@ -14,7 +14,7 @@ const BRAND_TEXT = "THE NEW FACE";
 const LOADER_WORDS = ["CGI", "VFX", "IMMERSIVE", "BRANDING"];
 
 const WORD_FADE_IN_MS = 320;
-const WORD_HOLD_MS = 380; // fully visible, before it starts leaving
+const WORD_HOLD_MS = 150; // fully visible, before it starts leaving
 const WORD_FADE_OUT_MS = 300;
 const WORD_TOTAL_MS = WORD_FADE_IN_MS + WORD_HOLD_MS + WORD_FADE_OUT_MS;
 const SEQUENCE_MS = LOADER_WORDS.length * WORD_TOTAL_MS; // all 3 words, start to last blur-out
