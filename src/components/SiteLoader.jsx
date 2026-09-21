@@ -1,26 +1,33 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 
-// First-load-only intro: a white screen with the studio's own line, each
-// letter blurring into focus, then -- after a short hold -- blurring back
-// out letter by letter, before the whole overlay fades away to reveal the
-// page underneath. Shown once per browser session (sessionStorage), not on
-// every internal navigation -- template.jsx's page transition still
-// handles that separately.
-const LOADER_TEXT = "CGI, Immersive, VFX";
+// First-load-only intro: a white screen with three zones -- "THE NEW FACE"
+// pinned top-center (same size as the site header's wordmark), the three
+// discipline words (CGI / VFX / Immersive) taking turns center-stage, each
+// blurring into focus, holding, then blurring back out before the next one
+// starts, and a 0->100% counter running bottom-center in step with the
+// whole sequence. Once the last word has blurred out, the whole overlay
+// fades away to reveal the page underneath. Shown once per browser session
+// (sessionStorage), not on every internal navigation -- template.jsx's page
+// transition still handles that separately.
+const BRAND_TEXT = "THE NEW FACE";
+const LOADER_WORDS = ["CGI", "VFX", "IMMERSIVE", "BRANDING"];
 
-const LETTER_STEP_IN = 45; // ms between each letter's blur-in start
-const LETTER_DURATION_IN = 500;
-const HOLD_MS = 550; // fully visible, before the letters start leaving
-const LETTER_STEP_OUT = 35;
-const LETTER_DURATION_OUT = 450;
-const OVERLAY_FADE_MS = 700; // the white screen's own fade, once letters are gone
+const WORD_FADE_IN_MS = 320;
+const WORD_HOLD_MS = 380; // fully visible, before it starts leaving
+const WORD_FADE_OUT_MS = 300;
+const WORD_TOTAL_MS = WORD_FADE_IN_MS + WORD_HOLD_MS + WORD_FADE_OUT_MS;
+const SEQUENCE_MS = LOADER_WORDS.length * WORD_TOTAL_MS; // all 3 words, start to last blur-out
+const OVERLAY_FADE_MS = 700; // the white screen's own fade, once the words are done
 
 const SiteLoader = () => {
   // null: still deciding (sessionStorage read is client-only); false: skip
   // entirely (already shown this session, or SSR pass); true: play it.
   const [show, setShow] = useState(null);
-  const [phase, setPhase] = useState("in"); // "in" | "out" | "fading"
+  const [overlayPhase, setOverlayPhase] = useState("playing"); // "playing" | "fading"
+  const [wordIndex, setWordIndex] = useState(0);
+  const [wordPhase, setWordPhase] = useState("in"); // "in" | "out"
+  const [percent, setPercent] = useState(0);
 
   useEffect(() => {
     let alreadyShown = false;
@@ -42,52 +49,86 @@ const SiteLoader = () => {
     } catch {
       // Ignore -- see above.
     }
-
-    const letterCount = LOADER_TEXT.length;
-    const inTotal = letterCount * LETTER_STEP_IN + LETTER_DURATION_IN;
-    const outStart = inTotal + HOLD_MS;
-    const outTotal = letterCount * LETTER_STEP_OUT + LETTER_DURATION_OUT;
-    const fadeStart = outStart + outTotal;
-
-    const toOut = setTimeout(() => setPhase("out"), outStart);
-    const toFading = setTimeout(() => setPhase("fading"), fadeStart);
-    const toHidden = setTimeout(() => setShow(false), fadeStart + OVERLAY_FADE_MS);
-
-    return () => {
-      clearTimeout(toOut);
-      clearTimeout(toFading);
-      clearTimeout(toHidden);
-    };
   }, []);
 
-  const letters = useMemo(() => LOADER_TEXT.split(""), []);
+  // Steps through the three words: each one flips to "in" at its slot's
+  // start, then to "out" once its hold ends -- then the overlay itself
+  // starts fading once the last word has finished blurring out.
+  useEffect(() => {
+    if (show !== true) return;
+
+    const timers = [];
+    LOADER_WORDS.forEach((_, i) => {
+      const slotStart = i * WORD_TOTAL_MS;
+      if (i > 0) {
+        timers.push(
+          setTimeout(() => {
+            setWordIndex(i);
+            setWordPhase("in");
+          }, slotStart)
+        );
+      }
+      timers.push(
+        setTimeout(
+          () => setWordPhase("out"),
+          slotStart + WORD_FADE_IN_MS + WORD_HOLD_MS
+        )
+      );
+    });
+
+    const toFading = setTimeout(() => setOverlayPhase("fading"), SEQUENCE_MS);
+    const toHidden = setTimeout(
+      () => setShow(false),
+      SEQUENCE_MS + OVERLAY_FADE_MS
+    );
+    timers.push(toFading, toHidden);
+
+    return () => timers.forEach(clearTimeout);
+  }, [show]);
+
+  // 0 -> 100 counter, paced against the same sequence duration via rAF so
+  // it reads as continuous rather than stepping once per word.
+  useEffect(() => {
+    if (show !== true) return;
+    let raf;
+    const start = performance.now();
+    const tick = (now) => {
+      const elapsed = now - start;
+      setPercent(Math.min(100, Math.round((elapsed / SEQUENCE_MS) * 100)));
+      if (elapsed < SEQUENCE_MS) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [show]);
+
+  const brandLetters = useMemo(() => BRAND_TEXT, []);
 
   if (!show) return null;
 
   return (
     <div
       className={`fixed inset-0 z-[200] flex items-center justify-center bg-white transition-opacity duration-700 ease-in-out ${
-        phase === "fading" ? "opacity-0" : "opacity-100"
+        overlayPhase === "fading" ? "opacity-0" : "opacity-100"
       }`}
-      style={{ pointerEvents: phase === "fading" ? "none" : "auto" }}
+      style={{ pointerEvents: overlayPhase === "fading" ? "none" : "auto" }}
       aria-hidden="true"
     >
-      <p className="font-mono uppercase text-[13px] tracking-[0.1em] text-black md:text-[18px]">
-        {letters.map((ch, i) => (
-          <span
-            key={i}
-            className={
-              phase === "in" ? "tnf-loader-letter-in" : "tnf-loader-letter-out"
-            }
-            style={{
-              animationDelay: `${
-                (phase === "in" ? i * LETTER_STEP_IN : i * LETTER_STEP_OUT)
-              }ms`,
-            }}
-          >
-            {ch === " " ? " " : ch}
-          </span>
-        ))}
+      {/* Same size/weight/font as the header's own wordmark (SiteHeader.jsx) */}
+      <p className="absolute left-1/2 top-5 -translate-x-1/2 font-mono font-light uppercase leading-none text-[11px] text-black md:top-[2.4vh] md:text-[15px]">
+        {brandLetters}
+      </p>
+
+      <p
+        key={wordIndex}
+        className={`font-mono uppercase text-[28px] tracking-[0.1em] text-black md:text-[48px] ${
+          wordPhase === "in" ? "tnf-loader-word-in" : "tnf-loader-word-out"
+        }`}
+      >
+        {LOADER_WORDS[wordIndex]}
+      </p>
+
+      <p className="absolute bottom-5 left-1/2 -translate-x-1/2 font-mono text-[11px] tabular-nums text-black md:bottom-[2.4vh] md:text-[13px]">
+        {String(percent).padStart(3, "0")}%
       </p>
     </div>
   );

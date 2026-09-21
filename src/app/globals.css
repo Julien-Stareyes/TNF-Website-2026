@@ -332,6 +332,41 @@
   animation: tnf-loader-letter-out 450ms ease-out forwards;
 }
 
+/* Faster word-level blur/fade for the loader's center word (CGI / VFX /
+   Immersive / Branding) -- same look as the letter-level ones above, just
+   quicker so the four words cycle briskly. */
+@keyframes tnf-loader-word-in {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+.tnf-loader-word-in {
+  display: inline-block;
+  opacity: 0;
+  animation: tnf-loader-word-in 320ms ease-out forwards;
+}
+
+@keyframes tnf-loader-word-out {
+  from {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  to {
+    opacity: 0;
+    filter: blur(8px);
+  }
+}
+.tnf-loader-word-out {
+  display: inline-block;
+  opacity: 1;
+  animation: tnf-loader-word-out 300ms ease-out forwards;
+}
+
 /* ---------------------------------------------------------------------------
    Logo marquee (LogoMarquee.jsx) -- an endless strip, two identical halves
    back to back, translated by exactly -50% so the loop point is invisible.
