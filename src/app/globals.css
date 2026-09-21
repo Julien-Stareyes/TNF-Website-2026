@@ -1,0 +1,731 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Reset defaults, applied globally. */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------------------------------------------------------------------------
+   ABC Whyte Inktrap — the studio's brand face. The Mono cut carries the
+   chrome (wordmark, nav, captions); the proportional cut is for body
+   copy. Served as WOFF2 from /public/fonts.
+
+   NOTE: these are trial cuts. A licensed set has to replace them before
+   the site goes public.
+   --------------------------------------------------------------------------- */
+@font-face {
+  font-family: "ABC Whyte Mono Inktrap";
+  src: url("/fonts/ABCWhyteMonoInktrap-Extralight.woff2") format("woff2");
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABC Whyte Mono Inktrap";
+  src: url("/fonts/ABCWhyteMonoInktrap-Book.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABC Whyte Mono Inktrap";
+  src: url("/fonts/ABCWhyteMonoInktrap-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABC Whyte Mono Inktrap";
+  src: url("/fonts/ABCWhyteMonoInktrap-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABC Whyte Inktrap";
+  src: url("/fonts/ABCWhyteInktrap-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  /* `font-mono` is what the whole site already reaches for, so pointing
+     it at the brand face applies it everywhere at once. */
+  --font-mono: "ABC Whyte Mono Inktrap", ui-monospace, SFMono-Regular, Menlo,
+    monospace;
+  --font-sans: "ABC Whyte Inktrap", "ABC Whyte Mono Inktrap", ui-sans-serif,
+    system-ui, sans-serif;
+
+  /* The brand accent — the dot beside the Info label, and the row under
+     the pointer in the Index. Defined once so the two can't drift. */
+  --color-accent: #c67a2e;
+}
+
+/* Site-wide custom cursor (CustomCursor.jsx) -- every element's own
+   cursor (buttons, links, the drag handles on the 3D logo, the Image
+   carousel's crosshair) would otherwise win over an inherited
+   `cursor: none`, so this reaches all of them with `*`. Gated on
+   `.tnf-cursor-active`, which CustomCursor only adds to <html> once it has
+   actually decided to draw the mark -- on touch, or inside the admin's
+   edit-mode preview iframe, it skips both, so the native cursor (and the
+   iframe's own text/drag cursors) stay put instead of just vanishing. */
+@media (min-width: 768px) and (hover: hover) {
+  html.tnf-cursor-active,
+  html.tnf-cursor-active * {
+    cursor: none;
+  }
+}
+
+/* The mark itself inverts whatever it's over -- black on light ground,
+   white on dark -- rather than needing its own light/dark variant. */
+.tnf-cursor {
+  mix-blend-mode: difference;
+}
+
+/* Hide the horizontal scrollbar on gallery scrollers — the cards are the
+   only affordance; a browser scrollbar in the middle of the layout reads
+   as a broken UI. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Page transition (View Transitions API, driven by src/app/template.jsx).
+   The header keeps its own view-transition group so it never gets the
+   cross-fade -- see the `viewTransitionName: "navbar"` on SiteHeader.
+   --------------------------------------------------------------------------- */
+::view-transition-group(navbar) {
+  animation: none;
+  z-index: 100;
+}
+
+::view-transition-old(.page-exit) {
+  animation: 500ms ease both page-out;
+}
+
+::view-transition-new(.page-enter) {
+  animation: 500ms ease both page-in;
+  animation-delay: 0.4s;
+}
+
+@keyframes page-out {
+  from {
+    filter: blur(0px);
+    opacity: 1;
+  }
+  to {
+    filter: blur(24px);
+    opacity: 0;
+  }
+}
+
+@keyframes page-in {
+  from {
+    filter: blur(24px);
+    opacity: 0;
+  }
+  to {
+    filter: blur(0px);
+    opacity: 1;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Full-screen menu (SiteMenu.jsx). The reveal itself (clip-path + blur/z
+   depth) is driven by GSAP inline. The links are plain, static black
+   labels; the per-link hover blur (siblings dim while the hovered one
+   stays sharp) is driven from JS mouseenter/mouseleave state in
+   SiteMenu.jsx, not a CSS `:hover` rule here -- this is just the
+   transition so that JS-driven filter/opacity change eases in smoothly.
+   --------------------------------------------------------------------------- */
+.tnf-menu-link {
+  font-size: clamp(0.9rem, 2.4vw, 1.7rem);
+  text-transform: uppercase;
+  transition: filter 0.4s ease, opacity 0.4s ease;
+}
+
+/* The "+" between links in the now-horizontal menu row -- deliberately
+   smaller than the links themselves so it reads as a separator, not
+   another item. */
+.tnf-menu-plus {
+  font-size: clamp(0.55rem, 1.2vw, 0.9rem);
+  color: rgb(205, 205, 205);
+}
+
+/* ---------------------------------------------------------------------------
+   Index page, option 2 (IndexYardHover.jsx) -- three-column project rows
+   (year / title / category), each column holding its text twice, stacked
+   with `top: 0%` / `top: 100%`. GSAP slides between the two on hover; this
+   is just the stack + the dim-the-rest-of-the-list rule from the
+   reference, which needs nothing fancier than a plain `:hover`, because
+   the row actually under the pointer is busy sliding its own text away.
+   --------------------------------------------------------------------------- */
+.tnf-yard-item {
+  width: 100%;
+  padding: 0.15em 0;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.tnf-yard-col {
+  position: relative;
+  overflow: hidden;
+}
+
+.tnf-yard-info,
+.tnf-yard-tag {
+  flex: 1;
+  height: 14px;
+  font-size: 12px;
+}
+
+.tnf-yard-tag {
+  height: 22px;
+  text-align: right;
+}
+
+/* The category/type tag (Product, Campaign, etc.) as a small pill rather
+   than plain text, so it reads distinctly from the year. */
+.tnf-yard-tag-pill {
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 999px;
+  padding: 0.25em 0.9em;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tnf-yard-name {
+  flex: 4;
+  height: clamp(1.75rem, 3.4vw, 2.75rem);
+  font-size: clamp(1.25rem, 2.5vw, 2rem);
+  text-align: center;
+}
+
+.tnf-yard-text {
+  position: absolute;
+  top: 0%;
+  left: 0;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  text-transform: uppercase;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: #000;
+}
+
+.tnf-yard-text-2 {
+  top: 100%;
+}
+
+.tnf-yard-menu:hover .tnf-yard-text-1 {
+  color: rgb(205, 205, 205);
+}
+
+/* ---------------------------------------------------------------------------
+   Project page (ProjectView.jsx) -- single centered media, minimap
+   thumbnail strip underneath. The outgoing media layer plays this once on
+   mount (a plain keyframe, not a JS-toggled transition, so it starts
+   fading immediately instead of needing a two-step class flip) while the
+   new item, already mounted underneath at full opacity, shows through.
+   --------------------------------------------------------------------------- */
+@keyframes tnf-media-fade-out {
+  from {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  to {
+    opacity: 0;
+    filter: blur(10px);
+  }
+}
+.tnf-media-fade-out {
+  animation: tnf-media-fade-out 400ms ease forwards;
+}
+
+/* Info panel reveal (ProjectView.jsx) -- each word of the description,
+   then the Domaine/Date rows, blur into focus on a per-item stagger
+   (each element carries its own `animation-delay`) rather than the whole
+   panel just appearing at once. */
+@keyframes tnf-word-reveal {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0);
+  }
+}
+.tnf-word-reveal {
+  display: inline-block;
+  opacity: 0;
+  animation: tnf-word-reveal 550ms ease-out forwards;
+}
+
+@keyframes tnf-block-reveal {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+.tnf-block-reveal {
+  opacity: 0;
+  animation: tnf-block-reveal 500ms ease-out forwards;
+}
+
+/* ---------------------------------------------------------------------------
+   Site loader (SiteLoader.jsx) -- first-load-only intro. Each letter of
+   "CGI, Immersive, VFX" blurs into focus, holds, then blurs back out,
+   before the white overlay itself fades away.
+   --------------------------------------------------------------------------- */
+@keyframes tnf-loader-letter-in {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+.tnf-loader-letter-in {
+  display: inline-block;
+  opacity: 0;
+  animation: tnf-loader-letter-in 500ms ease-out forwards;
+}
+
+@keyframes tnf-loader-letter-out {
+  from {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  to {
+    opacity: 0;
+    filter: blur(8px);
+  }
+}
+.tnf-loader-letter-out {
+  display: inline-block;
+  opacity: 1;
+  animation: tnf-loader-letter-out 450ms ease-out forwards;
+}
+
+/* ---------------------------------------------------------------------------
+   Logo marquee (LogoMarquee.jsx) -- an endless strip, two identical halves
+   back to back, translated by exactly -50% so the loop point is invisible.
+   --------------------------------------------------------------------------- */
+@keyframes tnf-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Immersive grid (ImmersiveGrid.jsx) -- same hover animation as the
+   stylized-components.cortiz.dev card grid (dim/desaturated video that
+   wakes up in colour on hover, the card lifting a few px, a ghost index
+   number blended over the top), carried over into TNF's light palette
+   instead of that reference's dark one.
+   --------------------------------------------------------------------------- */
+.tnf-imm-card {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  background: #fafafa;
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color 0.35s ease,
+    background-color 0.35s ease,
+    transform 0.35s ease;
+}
+.tnf-imm-card:hover {
+  border-color: rgba(0, 0, 0, 0.25);
+  background: #fff;
+  transform: translateY(-3px);
+}
+
+.tnf-imm-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: grayscale(0.6) contrast(1.05);
+  opacity: 0.16;
+  transition:
+    opacity 0.45s ease,
+    filter 0.45s ease,
+    transform 0.6s ease;
+  pointer-events: none;
+}
+.tnf-imm-card:hover .tnf-imm-media {
+  filter: grayscale(0) contrast(1);
+  opacity: 0.85;
+  transform: scale(1.04);
+}
+
+/* Keeps the copy legible over whatever frame the video is on, in both
+   states -- lighter once the media itself has faded up on hover. */
+.tnf-imm-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#ffffff00 0%, #ffffffb0 55%, #ffffffd0 100%);
+  pointer-events: none;
+  transition: opacity 0.45s ease;
+}
+.tnf-imm-card:hover .tnf-imm-scrim {
+  opacity: 0.7;
+}
+
+.tnf-imm-index {
+  position: absolute;
+  z-index: 1;
+  top: 16px;
+  right: 20px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 56px;
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.08);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  user-select: none;
+  transition: color 0.35s ease;
+}
+.tnf-imm-card:hover .tnf-imm-index {
+  color: rgba(0, 0, 0, 0.16);
+}
+
+.tnf-imm-action {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 6px;
+  background: #000;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+.tnf-imm-card:hover .tnf-imm-action {
+  background: var(--color-accent);
+}
+.tnf-imm-action-arrow {
+  transition: transform 0.25s ease;
+}
+.tnf-imm-card:hover .tnf-imm-action-arrow {
+  transform: translateX(4px);
+}
+
+/* ---------------------------------------------------------------------------
+   Immersive 3D carousel (ImmersiveCarousel3D.jsx) -- dark glowing stage,
+   a radar floor, glass-sheen cards with a soft cyan glow border, arrows
+   and a thumbnail strip.
+   --------------------------------------------------------------------------- */
+/* Registered (not just declared) so the browser treats them as actual
+   animatable colours -- a plain custom property is a discrete value with
+   no in-between states, so `transition: background ...` alone would just
+   hard-cut from one project's gradient to the next instead of crossfading
+   through it. Registering them here is what makes the transition below
+   on --imm-bg-a/--imm-bg-b (not on `background` itself) actually fade. */
+@property --imm-bg-a {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #17414c;
+}
+@property --imm-bg-b {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #060f14;
+}
+
+.tnf-imm3d-bg {
+  /* A different gradient per project (the two --imm-bg-a/--imm-bg-b
+     custom properties above, set inline from the current project's slug
+     in ImmersiveCarousel3D.jsx), slowly drifting via background-position
+     rather than sitting static -- background-size is oversized (200%)
+     specifically so that drift has room to move without ever showing a
+     hard edge. The dev panel's flat colour swatch still overrides this
+     outright (see the bgOverride style branch in the component). */
+  background: linear-gradient(135deg, var(--imm-bg-a, #17414c), var(--imm-bg-b, #060f14));
+  background-size: 200% 200%;
+  animation: tnf-imm3d-bg-move 22s ease-in-out infinite;
+  transition: --imm-bg-a 0.9s ease, --imm-bg-b 0.9s ease;
+  color: #fff;
+}
+
+@keyframes tnf-imm3d-bg-move {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Faint dot grid over the gradient -- the reference's "schematic" feel. */
+.tnf-imm3d-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 28px 28px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Concentric rings under the stack -- one repeating radial gradient,
+   flattened into an ellipse with scaleY and faded at the edges with a
+   mask, rather than a stack of individually-positioned rings. */
+.tnf-imm3d-floor {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  width: 140vw;
+  height: 140vw;
+  transform: translate(-50%, -50%) scaleY(0.28);
+  background: repeating-radial-gradient(
+    circle,
+    transparent 0,
+    transparent 78px,
+    rgba(255, 255, 255, 0.07) 79px,
+    transparent 80px
+  );
+  -webkit-mask-image: radial-gradient(circle, #000 0%, #000 35%, transparent 70%);
+  mask-image: radial-gradient(circle, #000 0%, #000 35%, transparent 70%);
+  pointer-events: none;
+}
+
+/* The one remaining caption: just the current project's name, big,
+   bottom-left, swapping as the ring spins past each card. */
+.tnf-imm3d-title-lg {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  font-size: clamp(14px, 1.8vw, 28px);
+  line-height: 1;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.6);
+  /* Same inversion trick as the custom cursor (.tnf-cursor) -- always
+     reads against the shifting card/background colour underneath
+     instead of needing its own light/dark variant. */
+  mix-blend-mode: difference;
+}
+
+.tnf-imm3d-arrow {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(6px);
+  color: rgba(255, 255, 255, 0.8);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  transition: border-color 0.25s ease, background-color 0.25s ease, color 0.25s ease;
+}
+.tnf-imm3d-arrow:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.tnf-imm3d-thumb {
+  position: relative;
+  width: 84px;
+  height: 60px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: #0a1e24;
+  transition: border-color 0.25s ease, opacity 0.25s ease;
+  opacity: 0.55;
+}
+.tnf-imm3d-thumb-active {
+  border-color: rgba(255, 255, 255, 0.75);
+  opacity: 1;
+}
+.tnf-imm3d-thumb-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tnf-imm3d-thumb-label {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 3px;
+  font-family: var(--font-sans);
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 640px) {
+  .tnf-imm3d-thumb {
+    display: none;
+  }
+}
+
+@theme inline {
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}

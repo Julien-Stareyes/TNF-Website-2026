@@ -1,0 +1,97 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788793993954,
+      "tag": "0000_keen_magdalene",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788796338397,
+      "tag": "0001_premium_maddog",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788797789612,
+      "tag": "0002_careless_mother_askani",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788798608649,
+      "tag": "0003_tiny_onslaught",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788799342855,
+      "tag": "0004_master_list",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788799814184,
+      "tag": "0005_per_tab_curation",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788799891650,
+      "tag": "0006_completed_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789371759835,
+      "tag": "0007_detail_layout",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789407211054,
+      "tag": "0008_index_technologies",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789414882302,
+      "tag": "0009_poster_mobile",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789981900000,
+      "tag": "0010_image_full_screen",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789983000000,
+      "tag": "0011_image_cover_blur",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790006408507,
+      "tag": "0012_project_brand",
+      "breakpoints": true
+    }
+  ]
+}
