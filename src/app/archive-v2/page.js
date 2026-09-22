@@ -23,17 +23,10 @@ export default async function IndexPageV2() {
       year: r.year,
       category: r.category ?? "",
       technologies: r.technologies ?? "",
-      previewUrl:
-        r.imageCoverDesktopUrl ??
-        r.posterUrl ??
-        r.bgImageUrl ??
-        r.gallery?.[0]?.url ??
-        null,
-      previewType: r.imageCoverDesktopUrl
-        ? "video"
-        : r.posterUrl || r.bgImageUrl
-        ? "image"
-        : r.gallery?.[0]?.type ?? "image",
+      // Preview media: only ever the project's first gallery item (see
+      // /archive/page.js for the same logic).
+      previewUrl: r.gallery?.[0]?.url ?? null,
+      previewType: r.gallery?.[0]?.type ?? "image",
     }))
     .sort((a, b) => {
       if ((b.year ?? 0) !== (a.year ?? 0)) return (b.year ?? 0) - (a.year ?? 0);

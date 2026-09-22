@@ -152,7 +152,7 @@ export default function IndexYardHover({ projects }) {
         ref={previewWrapRef}
         className="hidden md:block fixed top-0 left-0 z-[2] w-[220px] h-[270px] pointer-events-none"
       >
-        <div ref={previewRef} className="absolute inset-0 overflow-hidden bg-black/5" />
+        <div ref={previewRef} className="absolute inset-0 overflow-hidden bg-white" />
       </div>
 
       <section className="relative min-h-[100svh] bg-white text-black pt-[9em] pb-[17.5em] px-8">

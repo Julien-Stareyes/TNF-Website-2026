@@ -27,19 +27,12 @@ export default async function IndexPage() {
       // The last two columns, shown exactly as typed in the admin.
       category: r.category ?? "",
       technologies: r.technologies ?? "",
-      // Preview media, in order of how well it represents the project:
-      // the Image-tab cover, then poster, backdrop, first gallery item.
-      previewUrl:
-        r.imageCoverDesktopUrl ??
-        r.posterUrl ??
-        r.bgImageUrl ??
-        r.gallery?.[0]?.url ??
-        null,
-      previewType: r.imageCoverDesktopUrl
-        ? "video"
-        : r.posterUrl || r.bgImageUrl
-        ? "image"
-        : r.gallery?.[0]?.type ?? "image",
+      // Preview media: only ever the project's first gallery item,
+      // whatever it is -- image or video, any format. No fallback to the
+      // Image-tab cover/poster/backdrop; if there is no gallery item, the
+      // row just shows a plain white background (see IndexYardHover.jsx).
+      previewUrl: r.gallery?.[0]?.url ?? null,
+      previewType: r.gallery?.[0]?.type ?? "image",
     }))
     .sort((a, b) => {
       // Latest year first, alphabetical inside a year.
