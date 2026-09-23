@@ -41,15 +41,19 @@ async function listCuratedTab(tab) {
   }));
 }
 
-// Index — every published project, newest completion first, then title.
-// `completed_at` is precise (day-level); a null falls back to year via
-// COALESCE so the ordering degrades gracefully for legacy rows.
+// Index -- every published project. Manually positioned projects
+// (index_position set, via drag-reorder in the admin) lead in that order;
+// anything not yet manually placed falls back to the original
+// newest-completion-first behavior. `completed_at` is precise
+// (day-level); a null falls back to year via COALESCE so the fallback
+// ordering degrades gracefully for legacy rows.
 async function listIndexTab() {
   return db
     .select()
     .from(projects)
     .where(eq(projects.isPublished, true))
     .orderBy(
+      sql`${projects.indexPosition} asc nulls last`,
       sql`coalesce(${projects.completedAt}, make_date(coalesce(${projects.year}, 2026), 1, 1)) desc`,
       asc(projects.title)
     );
@@ -122,6 +126,22 @@ export async function reorderTab(tab, orderedProjectIds) {
             eq(projectTabs.tab, tab)
           )
         );
+    }
+  });
+}
+
+// Rewrite manual ordering for the Index page. Unlike reorderTab, this
+// writes straight to projects.index_position (Index has no membership
+// table -- it's just every published project), and it expects the FULL
+// currently-visible list every time so the whole order is deterministic
+// afterwards, not just the two rows that moved.
+export async function reorderIndex(orderedProjectIds) {
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < orderedProjectIds.length; i++) {
+      await tx
+        .update(projects)
+        .set({ indexPosition: i })
+        .where(eq(projects.id, orderedProjectIds[i]));
     }
   });
 }

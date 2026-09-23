@@ -5,6 +5,35 @@ import SiteHeader from "@/components/SiteHeader";
 import { EditModeProvider, Editable, useEditMode } from "@/lib/edit-mode";
 import { markMuted } from "@/lib/muted-video";
 
+const isGifUrl = (url) => /\.gif(?:[?#]|$)/i.test(url || "");
+
+// Paints just the first frame of an animated GIF onto a canvas instead of
+// letting an <img> play the whole loop -- used for the thumbnail rail,
+// where a dozen tiny animating GIFs read as "videos" launching every time
+// a project opens. Drawing (not reading back) a cross-origin image onto a
+// canvas doesn't need CORS headers on the source, only extracting its
+// pixels would -- so this works against the bucket as-is.
+const GifFirstFrame = ({ src, className }) => {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      canvas.width = img.naturalWidth || 1;
+      canvas.height = img.naturalHeight || 1;
+      canvas.getContext("2d")?.drawImage(img, 0, 0);
+    };
+    img.src = src;
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+  return <canvas ref={canvasRef} aria-hidden="true" className={className} />;
+};
+
 // A project's own page: thenewface.io/<slug>. One media item fills the
 // center of the screen; a small strip of thumbnails scrolls, vertically,
 // past a persistent stroke pinned to the vertical centre of the right
@@ -18,6 +47,14 @@ const ITEM_SIZE = 34; // px -- thumbnail square, and the stroke that matches it
 const ITEM_GAP = 10;
 const ITEM_STEP = ITEM_SIZE + ITEM_GAP;
 const FADE_MS = 400;
+// How many thumbnails on either side of the active one actually get a real
+// <video>/<img>/gif-canvas mounted -- everything further out renders as an
+// empty placeholder cell instead. The rail's own viewport (60vh, capped at
+// 420px) only ever shows ~9-10 items at once, so a radius of 6 comfortably
+// covers what's visible plus what's about to scroll in; a project with a
+// heavy gallery (several videos + gifs) no longer fires every thumbnail's
+// network request at once on mount -- only the ones actually near view.
+const THUMB_LOAD_RADIUS = 6;
 
 // Shown in the info panel when a project hasn't authored its own copy yet.
 const DEFAULT_DESCRIPTION =
@@ -126,13 +163,19 @@ const MediaLayer = ({ item, className = "", style }) => {
   );
 };
 
-// A video slide + a minimal click-to-pause control. Rather than the
-// browser's own scrubber/volume bar (`controls`), just a small play/pause
-// glyph that sits quietly in the corner and flips state -- clicking
-// anywhere on the video toggles it.
+// A video slide + a minimal player: click anywhere to play/pause, a thin
+// scrubbable timeline along the bottom, and a mute toggle -- muted by
+// default (autoplay requires it) until the person turns sound on
+// themselves. No native `controls` chrome; everything here is drawn to
+// match the rest of the site (hairline track, plain glyphs, fades in on
+// hover rather than sitting on screen the whole time).
 const VideoLayer = ({ item, className, style }) => {
   const videoRef = useRef(null);
+  const trackRef = useRef(null);
+  const scrubbingRef = useRef(false);
   const [paused, setPaused] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const [progress, setProgress] = useState(0); // 0..1
 
   const togglePlay = () => {
     const el = videoRef.current;
@@ -144,19 +187,82 @@ const VideoLayer = ({ item, className, style }) => {
     }
   };
 
+  const toggleMute = (e) => {
+    e.stopPropagation();
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = !el.muted;
+    setMuted(el.muted);
+  };
+
+  // Runs once on mount only (empty deps) -- this used to live inline on
+  // the <video> ref instead, but an inline ref callback is a fresh
+  // function every render, which React treats as a *new* ref and
+  // re-invokes with the same DOM node on every state change. That
+  // re-forced `muted = true` right back on after every render, which the
+  // mute button's own `setMuted` triggers -- so unmuting silently
+  // reverted itself on the very next render. `markMuted` only needs to
+  // run once, at mount, to satisfy iOS's autoplay-requires-muted rule.
+  useEffect(() => {
+    markMuted(videoRef.current);
+  }, []);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return undefined;
+    const onTimeUpdate = () => {
+      // While a drag is scrubbing, the pointer position drives `progress`
+      // instead -- otherwise the video's own timeupdate (still catching
+      // up to the seek) would fight the drag every frame.
+      if (scrubbingRef.current || !el.duration) return;
+      setProgress(el.currentTime / el.duration);
+    };
+    el.addEventListener("timeupdate", onTimeUpdate);
+    return () => el.removeEventListener("timeupdate", onTimeUpdate);
+  }, []);
+
+  const ratioFromPointer = (clientX) => {
+    const track = trackRef.current;
+    if (!track) return 0;
+    const rect = track.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  };
+
+  const onTrackPointerDown = (e) => {
+    e.stopPropagation();
+    const el = videoRef.current;
+    if (!el || !el.duration) return;
+    scrubbingRef.current = true;
+    const apply = (clientX) => {
+      const ratio = ratioFromPointer(clientX);
+      setProgress(ratio);
+      el.currentTime = ratio * el.duration;
+    };
+    apply(e.clientX);
+    const onMove = (ev) => apply(ev.clientX);
+    const onUp = () => {
+      scrubbingRef.current = false;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   return (
-    <div className={`absolute inset-0 ${className}`} style={style}>
-      <button
-        type="button"
+    <div className={`absolute inset-0 group/video ${className}`} style={style}>
+      <div
         onClick={togglePlay}
         aria-label={paused ? "Play" : "Pause"}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") togglePlay();
+        }}
         className="absolute inset-0 size-full cursor-pointer"
       >
         <video
-          ref={(el) => {
-            markMuted(el);
-            videoRef.current = el;
-          }}
+          ref={videoRef}
           src={item.video}
           poster={item.image || undefined}
           autoPlay
@@ -172,7 +278,7 @@ const VideoLayer = ({ item, className, style }) => {
         />
         <span
           className={`pointer-events-none absolute bottom-4 right-4 flex size-9 items-center justify-center rounded-full border border-white/20 bg-black/30 backdrop-blur-sm transition-opacity duration-200 ${
-            paused ? "opacity-100" : "opacity-0 hover:opacity-100"
+            paused ? "opacity-100" : "opacity-0 group-hover/video:opacity-100"
           }`}
         >
           {paused ? (
@@ -184,10 +290,56 @@ const VideoLayer = ({ item, className, style }) => {
             </span>
           )}
         </span>
-      </button>
+
+        {/* Mute toggle -- mirrors the play/pause control, opposite corner. */}
+        <button
+          type="button"
+          onClick={toggleMute}
+          aria-label={muted ? "Unmute" : "Mute"}
+          className="absolute bottom-4 left-4 flex size-9 items-center justify-center rounded-full border border-white/20 bg-black/30 backdrop-blur-sm opacity-0 transition-opacity duration-200 group-hover/video:opacity-100"
+        >
+          <MuteGlyph muted={muted} />
+        </button>
+
+        {/* Timeline -- a hairline track the full width of the slide, a
+            little above the two corner controls so the hit areas don't
+            overlap. Drag anywhere on it, or click to jump straight there. */}
+        <div
+          ref={trackRef}
+          onPointerDown={onTrackPointerDown}
+          className="absolute inset-x-4 bottom-14 flex h-4 cursor-pointer items-center opacity-0 transition-opacity duration-200 group-hover/video:opacity-100"
+        >
+          <div className="relative h-[2px] w-full rounded-full bg-white/25">
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-white"
+              style={{ width: `${progress * 100}%` }}
+            />
+            <div
+              className="absolute top-1/2 size-2 -translate-y-1/2 rounded-full bg-white"
+              style={{ left: `calc(${progress * 100}% - 4px)` }}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
+
+// Two bars for muted, a small speaker-with-waves glyph for unmuted -- kept
+// to plain strokes/shapes, same weight as the play/pause glyph beside it.
+const MuteGlyph = ({ muted }) =>
+  muted ? (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M1 5H4L8 1.5V12.5L4 9H1V5Z" fill="white" />
+      <path d="M10.5 4.5L13.5 9.5M13.5 4.5L10.5 9.5" stroke="white" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  ) : (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M1 5H4L8 1.5V12.5L4 9H1V5Z" fill="white" />
+      <path d="M10.3 4.7C11.9 6.3 11.9 7.7 10.3 9.3" stroke="white" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M11.8 3.2C14 5.4 14 8.6 11.8 10.8" stroke="white" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
 
 const MinimapDetail = ({ project }) => {
   const theme = project.theme ?? "dark";
@@ -244,10 +396,36 @@ const MinimapDetail = ({ project }) => {
   useEffect(() => {
     setActiveIndex(0);
     setOutgoingIndex(null);
+    setLoadedIndices(new Set([0]));
     targetTranslateRef.current = 0;
     currentTranslateRef.current = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.slug]);
+
+  // Which rail thumbnails have ever come within THUMB_LOAD_RADIUS of the
+  // active one -- once an index is added it's never removed, so a
+  // thumbnail that's already loaded stays mounted even after scrolling
+  // past it. A plain distance-from-active check (no memory) would instead
+  // unmount it the moment it left the radius and re-fetch it from scratch
+  // the next time it came back in range -- fine going straight through
+  // once, but a scroll-back-and-forth would repeatedly re-trigger the
+  // exact request burst this was meant to avoid.
+  const [loadedIndices, setLoadedIndices] = useState(() => new Set([0]));
+  useEffect(() => {
+    setLoadedIndices((prev) => {
+      const lo = Math.max(0, activeIndex - THUMB_LOAD_RADIUS);
+      const hi = Math.min(total - 1, activeIndex + THUMB_LOAD_RADIUS);
+      let changed = false;
+      const next = new Set(prev);
+      for (let i = lo; i <= hi; i += 1) {
+        if (!next.has(i)) {
+          next.add(i);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [activeIndex, total]);
 
   useEffect(() => {
     if (total <= 1) return undefined;
@@ -307,7 +485,15 @@ const MinimapDetail = ({ project }) => {
   // one-step-per-gesture lock) -- just a slower multiplier than a 1:1
   // scroll would give.
   useEffect(() => {
-    if (total <= 1) return undefined;
+    // No `total <= 1` bail here (unlike the rail's own rAF loop just above)
+    // -- a single-item project still needs the wheel listener attached,
+    // otherwise scrolling did nothing at all and the info panel (the
+    // description text) could never be reached. With one item,
+    // `targetTranslateRef` never moves off 0 (`maxTranslate` is 0), so
+    // `atIndex` below is always `0 === total - 1`, and every scroll --
+    // forward or back -- goes straight into the overscroll-to-reveal-info
+    // branch, which is exactly what's wanted when there's nowhere else to
+    // scroll to.
     const onWheel = (e) => {
       e.preventDefault();
       const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
@@ -542,19 +728,51 @@ const MinimapDetail = ({ project }) => {
               className="absolute top-0 left-0 flex flex-col"
               style={{ gap: ITEM_GAP }}
             >
-              {mediaItems.map((item, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => goTo(i)}
-                  style={{ width: ITEM_SIZE, height: ITEM_SIZE }}
-                  className="shrink-0 overflow-hidden select-none"
-                >
-                  {item.image && (
-                    <img src={item.image} alt="" draggable={false} className="size-full object-cover" />
-                  )}
-                </button>
-              ))}
+              {mediaItems.map((item, i) => {
+                const isLoaded = loadedIndices.has(i);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => goTo(i)}
+                    style={{ width: ITEM_SIZE, height: ITEM_SIZE }}
+                    className="shrink-0 overflow-hidden select-none bg-white/5"
+                  >
+                    {isLoaded &&
+                      (item.image ? (
+                        isGifUrl(item.image) ? (
+                          // A plain <img> would animate the whole GIF right
+                          // there in the rail -- same "video playing in a tiny
+                          // square" complaint as the <video> case below, just
+                          // via a different file type. First frame only.
+                          <GifFirstFrame src={item.image} className="size-full object-cover" />
+                        ) : (
+                          <img src={item.image} alt="" draggable={false} className="size-full object-cover" />
+                        )
+                      ) : (
+                        item.video && (
+                          // No autoplaying <video> here -- there can be a dozen
+                          // of these squares in the rail at once, and looping
+                          // every one of them would mean a dozen live decoders
+                          // for something the size of a stamp. `#t=0.1` makes
+                          // the browser seek to (and decode) just that one
+                          // frame for its poster, the same "first frame" the
+                          // main slide shows, without ever calling play() --
+                          // as light as a plain <img> thumbnail.
+                          <video
+                            src={`${item.video}#t=0.1`}
+                            preload="metadata"
+                            muted
+                            playsInline
+                            disableRemotePlayback
+                            aria-hidden="true"
+                            className="size-full object-cover pointer-events-none"
+                          />
+                        )
+                      ))}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

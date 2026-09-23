@@ -70,6 +70,13 @@ export const projects = pgTable("projects", {
   // uses it — Image/Immersive have their own curated position on
   // project_tabs, Index sorts by year).
   position: integer("position").notNull().default(0),
+  // Manual override for the Index page's order. null (the default) means
+  // "not manually placed" -- listIndexTab() then falls back to sorting by
+  // completion date, same as before this existed. Dragging in the admin's
+  // Index tab assigns 0..N-1 to every visible project at once (see
+  // reorderIndex()), so from that point on the whole list is manually
+  // ordered until someone reorders again.
+  indexPosition: integer("index_position"),
   // Unused by the current app (tab membership is driven by `project_tabs`
   // below instead) — kept here only so drizzle doesn't see them as
   // orphaned and offer to drop them, which would delete real data.

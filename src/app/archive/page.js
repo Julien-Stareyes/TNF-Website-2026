@@ -33,12 +33,11 @@ export default async function IndexPage() {
       // row just shows a plain white background (see IndexYardHover.jsx).
       previewUrl: r.gallery?.[0]?.url ?? null,
       previewType: r.gallery?.[0]?.type ?? "image",
-    }))
-    .sort((a, b) => {
-      // Latest year first, alphabetical inside a year.
-      if ((b.year ?? 0) !== (a.year ?? 0)) return (b.year ?? 0) - (a.year ?? 0);
-      return a.title.localeCompare(b.title);
-    });
+    }));
+    // No client-side re-sort here: listForTab("index") already returns rows
+    // in the right order (indexPosition asc nulls last, then completedAt/
+    // year, then title) -- re-sorting by year+alphabetical here was
+    // silently discarding the admin's manual drag-reorder every time.
 
   return (
     <>

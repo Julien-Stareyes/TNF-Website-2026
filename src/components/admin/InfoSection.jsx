@@ -50,7 +50,9 @@ export default function InfoSection({ initial }) {
 
   const reorderServices = (newIds) =>
     setForm((f) => {
-      const byId = new Map(f.servicesItems.map((s, i) => [`s-${i}-${s}`, s]));
+      // Ids are index-based (`s-<i>`, see below) so they stay stable while
+      // typing -- rebuild the lookup from the current array each time.
+      const byId = new Map(f.servicesItems.map((s, i) => [`s-${i}`, s]));
       const next = newIds.map((id) => byId.get(id)).filter((s) => s !== undefined);
       return { ...f, servicesItems: next };
     });
@@ -119,12 +121,16 @@ export default function InfoSection({ initial }) {
           </div>
 
           <SortableList
-            ids={form.servicesItems.map((s, i) => `s-${i}-${s}`)}
+            ids={form.servicesItems.map((s, i) => `s-${i}`)}
             onReorder={reorderServices}
           >
             <ul className="space-y-2">
               {form.servicesItems.map((item, i) => (
-                <SortableItem key={`s-${i}-${item}`} id={`s-${i}-${item}`}>
+                // Id is index-based, not content-based: including `item`
+                // here meant every keystroke changed the key, so React
+                // unmounted/remounted the input and dropped focus after
+                // each character.
+                <SortableItem key={`s-${i}`} id={`s-${i}`}>
                   {({ dragHandle }) => (
                     <li className="flex items-center gap-2">
                       {dragHandle}

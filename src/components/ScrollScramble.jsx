@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { PROJECTS as STATIC_PROJECTS } from "@/data/projects";
 import ProjectMedia, { formatAspectClass } from "@/components/ProjectMedia";
@@ -384,6 +385,13 @@ const ScrollScramble = ({ projects: projectsProp }) => {
   // from this one continuous number.
   const [progress, setProgress] = useState(0);
 
+  // Gates the index column's portal to <body> (see the render below) --
+  // false during SSR/first paint so the server-rendered markup never
+  // disagrees with the client's, same guard SiteHeader uses for its own
+  // portal.
+  const [indexColumnMounted, setIndexColumnMounted] = useState(false);
+  useEffect(() => setIndexColumnMounted(true), []);
+
   const sectionsRef = useRef([]);
 
   useEffect(() => {
@@ -607,25 +615,37 @@ const ScrollScramble = ({ projects: projectsProp }) => {
       />
 
       {/* Index down the right edge. Column is centred on the viewport so
-          the active row sits level with the middle of the section. */}
-      <div className="hidden md:flex fixed inset-y-0 right-[2.4vw] z-40 items-center justify-end pointer-events-none">
-        <div ref={listRef}>
-        <ProjectList
-          centerFloat={progress}
-          theme={theme}
-          projects={projects}
-          awake={listNear}
-          onPick={(i, opts) => {
-            const idx = mod(i, N);
-            const p = projects[idx];
-            // Clicking the row you're already on opens it; clicking
-            // another scrolls the page to it first.
-            if (opts?.open || idx === active) goToProject(p);
-            else scrollToIndex(idx);
-          }}
-        />
-        </div>
-      </div>
+          the active row sits level with the middle of the section.
+          Portalled onto <body>, same reason and same fix as SiteHeader:
+          rendered in place, this column sat under the covers' own
+          transformed/GPU-composited layers, which is what silently drops
+          the titles' and dots' `mix-blend-mode: difference` (confirmed
+          live -- a plain blended test element at this exact spot failed
+          to blend too, and only started working again once it was
+          appended straight to <body>). Portalling escapes that layer
+          instead of fighting it with more CSS. */}
+      {indexColumnMounted &&
+        createPortal(
+          <div className="hidden md:flex fixed inset-y-0 right-[2.4vw] z-40 items-center justify-end pointer-events-none">
+            <div ref={listRef}>
+              <ProjectList
+                centerFloat={progress}
+                theme={theme}
+                projects={projects}
+                awake={listNear}
+                onPick={(i, opts) => {
+                  const idx = mod(i, N);
+                  const p = projects[idx];
+                  // Clicking the row you're already on opens it; clicking
+                  // another scrolls the page to it first.
+                  if (opts?.open || idx === active) goToProject(p);
+                  else scrollToIndex(idx);
+                }}
+              />
+            </div>
+          </div>,
+          document.body
+        )}
         </>
       )}
 

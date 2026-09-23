@@ -197,7 +197,12 @@ export default function AdminDashboard({
             />
           )}
           {nav === "index" && (
-            <IndexTab projects={projects} onEdit={openEditor} />
+            <IndexTab
+              projects={projects}
+              setProjects={setProjects}
+              onEdit={openEditor}
+              onRefresh={refresh}
+            />
           )}
           {nav === "info" && <InfoSection initial={initialInfo} />}
         </>
@@ -549,14 +554,25 @@ function CuratedTab({
 }
 
 // ---------------------------------------------------------------------------
-// Index — auto-sorted by completion date. Read-only ordering (no drag);
-// clicking a row edits the project.
+// Index -- drag to reorder. There's no membership here (every published
+// project is automatically "in" the Index), so dragging just assigns
+// index_position 0..N-1 to the whole visible list, overriding the
+// date-based fallback order from that point on (see listIndexTab() /
+// reorderIndex() in lib/projects.js).
 // ---------------------------------------------------------------------------
-function IndexTab({ projects, onEdit }) {
+function IndexTab({ projects, setProjects, onEdit, onRefresh }) {
+  const [previewNonce, setPreviewNonce] = useState(0);
+  const bumpPreview = () => setPreviewNonce((n) => n + 1);
+
   const sorted = useMemo(() => {
     return [...projects]
       .filter((p) => p.isPublished)
       .sort((a, b) => {
+        const aPos = a.indexPosition;
+        const bPos = b.indexPosition;
+        if (aPos != null && bPos != null && aPos !== bPos) return aPos - bPos;
+        if (aPos != null && bPos == null) return -1;
+        if (aPos == null && bPos != null) return 1;
         const aKey = a.completedAt || (a.year ? `${a.year}-01-01` : "0000-00-00");
         const bKey = b.completedAt || (b.year ? `${b.year}-01-01` : "0000-00-00");
         if (aKey !== bKey) return bKey.localeCompare(aKey);
@@ -564,43 +580,116 @@ function IndexTab({ projects, onEdit }) {
       });
   }, [projects]);
 
+  // Index has no membership table -- "adding" a project here just means
+  // publishing it (isPublished: true), which is the one thing keeping it
+  // out (see the sort above). Candidates are every hidden project across
+  // all 52, same "+ Add" pattern as Image/Immersive's CuratedTab.
+  const [picking, setPicking] = useState(false);
+  const candidates = useMemo(
+    () =>
+      projects
+        .filter((p) => !p.isPublished)
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    [projects]
+  );
+
+  const addToIndex = async (project) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === project.id ? { ...p, isPublished: true } : p))
+    );
+    await fetch(`/api/projects/${project.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isPublished: true }),
+    });
+    setPicking(false);
+    onRefresh();
+    bumpPreview();
+  };
+
+  const reorder = async (newIds) => {
+    // Optimistic -- rewrite index_position locally for every visible row.
+    setProjects((prev) =>
+      prev.map((p) => {
+        const idx = newIds.indexOf(p.id);
+        if (idx < 0) return p;
+        return { ...p, indexPosition: idx };
+      })
+    );
+    await fetch("/api/projects/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tab: "index", ids: newIds }),
+    });
+    onRefresh();
+    bumpPreview();
+  };
+
   return (
-    <SplitPreview src="/archive">
+    <SplitPreview src="/archive" reloadKey={previewNonce}>
     <section className="space-y-3">
-      <div>
-        <h2 className="text-sm uppercase tracking-widest text-white/60">
-          Index ({sorted.length})
-        </h2>
-        <p className="text-[10px] text-white/40 mt-1">
-          Auto-sorted by completion date — edit a project to change its date
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm uppercase tracking-widest text-white/60">
+            Index ({sorted.length})
+          </h2>
+          <p className="text-[10px] text-white/40 mt-1">
+            Drag to reorder -- this is the public order on /archive. Unpositioned
+            projects fall back to newest-completion-first.
+          </p>
+        </div>
+        <button
+          onClick={() => setPicking(true)}
+          className="shrink-0 border border-white/20 px-3 py-1 rounded hover:bg-white/10 text-sm"
+        >
+          + Add
+        </button>
       </div>
-      <ul className="space-y-1">
-        {sorted.map((p) => (
-          <li key={p.id}>
-            <button
-              onClick={() => onEdit(p.id)}
-              className="w-full flex items-center gap-2 border border-white/10 px-2 py-2 rounded hover:border-white/30 text-left"
-            >
-              <Thumb project={p} small />
-              <span className="flex-1 min-w-0">
-                <span className="block truncate text-sm">{p.title}</span>
-                <span className="block truncate text-[11px] text-white/40">
-                  {p.category ?? "—"}
-                </span>
-              </span>
-              <span className="shrink-0 text-white/50 text-[11px] tabular-nums text-right">
-                {p.completedAt ?? (p.year ? `${p.year}-01-01` : "—")}
-              </span>
-            </button>
-          </li>
-        ))}
-        {sorted.length === 0 && (
-          <li className="text-white/40 border border-white/10 px-3 py-2 rounded">
-            No published projects.
-          </li>
-        )}
-      </ul>
+      <SortableList ids={sorted.map((p) => p.id)} onReorder={reorder}>
+        <ul className="space-y-1">
+          {sorted.map((p, i) => (
+            <SortableItem key={p.id} id={p.id}>
+              {({ dragHandle }) => (
+                <li className="flex items-center gap-2 border border-white/10 px-2 py-2 rounded">
+                  {dragHandle}
+                  <span className="text-white/40 w-5 shrink-0 text-xs tabular-nums">
+                    {i + 1}.
+                  </span>
+                  <Thumb project={p} small />
+                  <button
+                    onClick={() => onEdit(p.id)}
+                    className="flex-1 min-w-0 text-left group"
+                  >
+                    <span className="block truncate text-sm group-hover:underline">
+                      {p.title}
+                    </span>
+                    <span className="block truncate text-[11px] text-white/40">
+                      {p.category ?? "—"}
+                    </span>
+                  </button>
+                  <span className="shrink-0 text-white/50 text-[11px] tabular-nums text-right">
+                    {p.completedAt ?? (p.year ? `${p.year}-01-01` : "—")}
+                  </span>
+                </li>
+              )}
+            </SortableItem>
+          ))}
+          {sorted.length === 0 && (
+            <li className="text-white/40 border border-white/10 px-3 py-2 rounded">
+              No published projects.
+            </li>
+          )}
+        </ul>
+      </SortableList>
+
+      {picking && (
+        <ProjectPicker
+          candidates={candidates}
+          onPick={addToIndex}
+          onClose={() => setPicking(false)}
+          tab="index"
+        />
+      )}
     </section>
     </SplitPreview>
   );

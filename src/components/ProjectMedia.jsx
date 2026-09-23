@@ -124,7 +124,14 @@ const ProjectMedia = ({
   }, [mounted, isNear]);
 
   return (
-    <div className="relative size-full">
+    // isolation: isolate works around a Chromium/WebKit bug where a
+    // <video> element breaks mix-blend-mode compositing for anything
+    // stacked on top of it (the difference-blend index dots and titles
+    // over on ScrollScramble.jsx), even while the video is invisible
+    // (opacity 0, mid cross-fade). Isolating the video+poster into their
+    // own stacking context keeps that bug contained to this box instead
+    // of poisoning blend-mode elsewhere on the page.
+    <div className="relative size-full" style={{ isolation: "isolate" }}>
       {posterSrc && (
         <img
           src={posterSrc}
@@ -161,6 +168,17 @@ const ProjectMedia = ({
             opacity: ready ? 1 : 0,
             transitionProperty: "opacity",
             transitionDuration: `${FADE_MS}ms`,
+            // Forces this <video> onto the normal GPU compositing path
+            // instead of a hardware video-overlay plane. Overlay-plane
+            // video bypasses the browser's blend compositor, which is why
+            // the difference-blend index dots/titles over on
+            // ScrollScramble.jsx render as flat, unblended white whenever
+            // a video like this one sits behind them -- translateZ(0) is
+            // the standard trick to opt a video out of overlay
+            // compositing so blend modes elsewhere on the page work
+            // again.
+            transform: "translateZ(0)",
+            willChange: "transform",
           }}
           className={`absolute inset-0 size-full object-cover ${className}`}
         />

@@ -34,11 +34,16 @@ export default async function ProjectPage({ params, searchParams }) {
   // Shape into what ProjectView expects. DB gallery items are stored as
   // { url, type, format } — the client component wants { video } or
   // { image } keys plus a per-item format, so we widen each entry.
+  //
+  // Video items get no `image` (no poster attribute on the <video>): the
+  // admin never actually had a per-video cover field, only one shared
+  // project-level poster, which looked wrong whenever a project had
+  // several gallery videos. Leaving `poster` unset makes the browser
+  // show each video's own real first frame instead — always correct,
+  // no extra upload needed.
   const gallery = (p.gallery ?? []).map((g) => ({
     format: g.format ?? p.format,
-    ...(g.type === "video"
-      ? { video: g.url, image: p.posterUrl ?? null }
-      : { image: g.url }),
+    ...(g.type === "video" ? { video: g.url } : { image: g.url }),
   }));
   const project = {
     slug: p.slug,
