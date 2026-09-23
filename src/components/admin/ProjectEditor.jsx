@@ -500,11 +500,21 @@ export default function ProjectEditor({ project, onClose, onChange }) {
               slug={form.slug}
               role="cover-desktop"
               url={form.imageCoverDesktopUrl}
-              onSaved={(url) =>
-                setForm({ ...form, imageCoverDesktopUrl: url })
+              extractPoster
+              onSaved={(url, meta) =>
+                setForm((f) => ({
+                  ...f,
+                  imageCoverDesktopUrl: url,
+                  // Keeps the poster (shown before this video has loaded
+                  // anywhere it's used, e.g. the homepage's Image tab)
+                  // pinned to this exact video's own first frame instead
+                  // of silently going stale the next time the video is
+                  // swapped out.
+                  ...(meta?.posterUrl ? { posterUrl: meta.posterUrl } : {}),
+                }))
               }
               onClear={() =>
-                setForm({ ...form, imageCoverDesktopUrl: "" })
+                setForm((f) => ({ ...f, imageCoverDesktopUrl: "" }))
               }
             />
             <CoverField
@@ -519,6 +529,22 @@ export default function ProjectEditor({ project, onClose, onChange }) {
                 setForm({ ...form, imageCoverMobileUrl: "" })
               }
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <CoverField
+                label="Cover image (poster)"
+                slug={form.slug}
+                role="poster"
+                url={form.posterUrl}
+                onSaved={(url) => setForm((f) => ({ ...f, posterUrl: url }))}
+                onClear={() => setForm((f) => ({ ...f, posterUrl: "" }))}
+              />
+              <p className="text-[10px] text-white/40 mt-1">
+                Auto-filled with the cover desktop video's first frame on upload. Shown as a fallback before that video has loaded. Upload here to override it manually, or Clear to remove it.
+              </p>
+            </div>
           </div>
 
           {(form.format === "4:5" ||
@@ -754,7 +780,7 @@ export default function ProjectEditor({ project, onClose, onChange }) {
 }
 
 // A cover slot with thumbnail preview at the actual aspect ratio.
-function CoverField({ label, slug, role, url, onSaved, onClear }) {
+function CoverField({ label, slug, role, url, onSaved, onClear, extractPoster = false }) {
   const isVideo = url && (/video/.test(url) || url.match(/\.(mp4|mov|webm)$/i));
   return (
     <div>
@@ -787,7 +813,12 @@ function CoverField({ label, slug, role, url, onSaved, onClear }) {
         </div>
       )}
       <div className="flex items-center gap-3">
-        <UploadField slug={slug} role={role} onUploaded={onSaved} />
+        <UploadField
+          slug={slug}
+          role={role}
+          extractPoster={extractPoster}
+          onUploaded={(uploadedUrl, meta) => onSaved(uploadedUrl, meta)}
+        />
         {url && (
           <button
             onClick={onClear}

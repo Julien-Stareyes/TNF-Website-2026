@@ -36,7 +36,22 @@ const ProjectMedia = ({
     : project.image;
 
   const [mounted, setMounted] = useState(false); // <video> present in the DOM
-  const [ready, setReady] = useState(false); // actually playing -> drives the fade
+  // `frameLoaded` reveals the video the moment IT has a real decoded frame
+  // to show (currentTime already sits at 0 by default, before any play()
+  // call), rather than waiting for confirmed playback -- an earlier
+  // version tried to pre-extract the video's first frame onto a canvas
+  // via a *second*, hidden <video> pointed at the same file, so it could
+  // fade in over the cover photo before the real one had even loaded. Two
+  // problems with that: browsers -- Chrome included -- skip decoding
+  // frames for a `display: none` video, and even fixed, it doubled the
+  // network requests against a source that's already rate-limited under
+  // concurrent load (see the project-detail page's thumbnail rail),
+  // making the extraction fail more often than not. Revealing this same
+  // element early instead means there's only ever one request, and
+  // whatever frame it shows is *definitionally* the video's own -- no
+  // separate extraction to get wrong.
+  const [frameLoaded, setFrameLoaded] = useState(false);
+  const [ready, setReady] = useState(false); // actually playing -> logged for the poll below
   const ref = useRef(null);
 
   // The source is handed over here rather than in the markup, and only
@@ -62,6 +77,7 @@ const ProjectMedia = ({
     } else {
       timeout = setTimeout(() => {
         setReady(false);
+        setFrameLoaded(false);
         setMounted(false);
       }, FADE_MS);
     }
@@ -81,7 +97,11 @@ const ProjectMedia = ({
   //
   // So rather than trust any of them: ask the element how it is actually
   // doing, on a timer, and act on the answer. Two seconds of polling at
-  // rest costs nothing and cannot be missed.
+  // rest costs nothing and cannot be missed. This no longer gates the
+  // cross-fade itself (see `frameLoaded` above) -- it only keeps nudging
+  // playback along, so a declined/stalled autoplay still ends up looping
+  // once a gesture allows it, instead of sitting frozen on frame one
+  // forever.
   useEffect(() => {
     if (!mounted || !isNear) return;
 
@@ -123,6 +143,8 @@ const ProjectMedia = ({
     };
   }, [mounted, isNear]);
 
+  const videoVisible = frameLoaded || ready;
+
   return (
     // isolation: isolate works around a Chromium/WebKit bug where a
     // <video> element breaks mix-blend-mode compositing for anything
@@ -138,7 +160,7 @@ const ProjectMedia = ({
           alt=""
           style={{
             ...style,
-            opacity: ready ? 0 : 1,
+            opacity: videoVisible ? 0 : 1,
             transitionProperty: "opacity",
             transitionDuration: `${FADE_MS}ms`,
           }}
@@ -154,18 +176,35 @@ const ProjectMedia = ({
           loop
           playsInline
           preload="auto"
-          // `playing` is a one-shot event, and a cover served from cache
-          // can start before React has attached the handler — in which
-          // case it never arrives, `ready` stays false, and the poster
-          // covers a video that is playing perfectly well underneath it.
-          // `timeupdate` keeps coming, so it cannot be missed.
+          // Reveal on the first real frame, not on confirmed playback.
+          // In principle `currentTime` is still 0 the moment this fires --
+          // in practice, on a slower-to-buffer source (a `.mov` export
+          // whose index sits at the end of the file behaves this way, and
+          // R2's rate limit under concurrent requests makes it worse --
+          // see the project-detail page's thumbnail rail), the element
+          // can already have crept forward a second or two by the time
+          // enough data is finally in and this fires. Snapping back to 0
+          // here guarantees frame zero is what actually gets revealed,
+          // whatever the buffering story behind it was; loop+autoplay
+          // then carries on forward from there exactly as normal.
+          onLoadedData={(e) => {
+            const el = e.currentTarget;
+            if (el.currentTime > 0.05) {
+              try {
+                el.currentTime = 0;
+              } catch {
+                // ignore -- worst case it reveals wherever it already was
+              }
+            }
+            setFrameLoaded(true);
+          }}
           onPlaying={() => setReady(true)}
           onTimeUpdate={(e) => {
             if (e.currentTarget.currentTime > 0) setReady(true);
           }}
           style={{
             ...style,
-            opacity: ready ? 1 : 0,
+            opacity: videoVisible ? 1 : 0,
             transitionProperty: "opacity",
             transitionDuration: `${FADE_MS}ms`,
             // Forces this <video> onto the normal GPU compositing path
